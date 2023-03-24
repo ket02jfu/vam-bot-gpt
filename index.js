@@ -11,6 +11,8 @@ const openai = new OpenAI(process.env.OPENAI_API_KEY);
 let isCommand = false;
 const bot = new TelegramApi(token, { polling: true });
 
+const subscribers = {};
+
 const commands = [
     { command: '/start', description: 'Start the bot' },
     { command: '/help', description: 'Get help with the bot' },
@@ -105,6 +107,34 @@ bot.on('message', async (msg) => {
         });
     } 
 
+    else if(messageText.startsWith('/subscribe')){
+        bot.sendMessage(chatId, 'Введите интересы через запятую (например, technology, sports)');
+        bot.once('message', async (msg) => {
+            const interests = msg.text.split(',').map((interest) => interest.trim());
+
+            bot.sendMessage(chatId, 'На каком языке вы хотите прочитать новости?', {
+                reply_markup: {
+                    inline_keyboard: [[{ text: 'English', callback_data: 'en' }, { text: 'Русский', callback_data: 'ru' }]]
+                }
+            });
+
+            bot.on('callback_query', (query) => {
+                const language = query.data;
+                for (const interest of interests) {
+                    if (subscribers[interest]) {
+                        subscribers[interest].chatIds.push(chatId);
+                    } else {
+                        subscribers[interest] = {
+                            language: language,
+                            chatIds: [chatId]
+                        };
+                    }
+                }
+                bot.sendMessage(chatId, 'Вы подписались на новости!');
+            })
+        }
+    )}
+
     // ***REGULAR DIALOGUE***
     else {
         if (msg.photo && msg.photo.length > 0 && msg.photo[msg.photo.length - 1].file_id) {
@@ -146,9 +176,33 @@ async function getNews(chatId, interests, language, pageSize = 10) {
     }
 }
 
-bot.on('polling_error', async (error) => {
-    console.error(error);
-});
+async function sendNewsToSubscribers() {
+    try {
+        const interests = Object.keys(subscribers);
+        for (const interest of interests) {
+        const language = subscribers[interest].language;
+        const chatIds = subscribers[interest].chatIds;
+        const response = await axios.get(`https://newsapi.org/v2/everything?language=${language}&q=${interest}&apiKey=${newsApiKey}`);
+        const articles = response.data.articles;
+      
+        if (articles.length === 0) {
+          continue;
+        }
+      
+        const randomIndex = Math.floor(Math.random() * articles.length);
+        const article = articles[randomIndex];
+        const message = `${article.title}\n\n${formatDate(article.publishedAt)}\n${article.url}\n\n`;
+      
+        for (const chatId of chatIds) {
+          bot.sendMessage(chatId, message);
+        }
+      } 
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+setInterval(sendNewsToSubscribers, 3600000);
 
 function formatDate(date) {
     let init = date.substring(0, 10);
@@ -158,3 +212,10 @@ function formatDate(date) {
     let res = `${day}.${month}.${year}`;
     return res;
 }
+
+bot.on('polling_error', async (error) => {
+    console.error(error);
+});
+bot.on('webhook_error', (error) => {
+    console.log(error);
+});
