@@ -11,14 +11,34 @@ const openai = new OpenAI(process.env.OPENAI_API_KEY);
 let isCommand = false;
 const bot = new TelegramApi(token, { polling: true });
 
+const commands = [
+    { command: '/start', description: 'Start the bot' },
+    { command: '/help', description: 'Get help with the bot' },
+    { command: '/news', description: 'Get news for a selected topic' },
+    { command: '/generate', description: 'Photo generation by description (beta)' },
+    { command: '/photo', description: 'Generates similar photos based on the sent (beta)' },
+];
+
+// ***SET_COMMANDS**
+bot.setMyCommands(commands);
+
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const messageText = msg.text ? msg.text : '';
   
     // ***START***
-    if (messageText.startsWith('/start') || messageText.startsWith('/ыефке')) {
-        bot.sendMessage(chatId, 'Ask me a question in any language you like');
+     if (messageText.startsWith('/start') || messageText.startsWith('/ыефке')) {
+        bot.sendMessage(chatId, 'Ask me a question in any language you like or use the /help command to see what I can do!');
     } 
+
+    // ***HELP***
+    else if(messageText.startsWith('/help') || messageText.startsWith('/рудз')){
+        bot.sendMessage(chatId, `To understand what a bot can do, look at the following commands: 
+        \n/news - get news for a selected topic 
+        \n/generate - photo generation by description (beta)
+        \n/photo - generates similar photos based on the sent (beta)
+        \nEverything else I can just chat with you as a friend, just ask me about something`)
+    }
     
     // ***NEWS***
     else if (messageText.startsWith('/news') || messageText.startsWith('/туцы') || messageText.startsWith('/nws')) {
