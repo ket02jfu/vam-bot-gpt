@@ -112,6 +112,11 @@ bot.on('message', async (msg) => {
     else if(messageText.startsWith('/subscribe') || messageText.startsWith('/ыгиыскшиу')){
         isCommand = true;
 
+        if (isSubscribed(chatId)) {
+            bot.sendMessage(chatId, 'You are already subscribed to the news, use the /unsubscribe command to unsubscribe!');
+            return;
+        }
+
         if (isCommand) {
             bot.sendMessage(chatId, 'Enter interests separated by commas (for example, technology, sports)');
             bot.once('message', async (msg) => {
@@ -142,33 +147,37 @@ bot.on('message', async (msg) => {
         }
     }
 
-    // ***SUBSCRIBE***
+    // ***UnSUBSCRIBE***
     else if(messageText.startsWith('/unsubscribe') || messageText.startsWith('/гтыгиыскшиу')){
-        isCommand = true;
-        bot.sendMessage(chatId, 'Are you sure you want to unsubscribe from the newsletter?', {
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: 'Yes', callback_data: 'yes' }, { text: 'No', callback_data: 'no' }]
-              ]
-            }
-          });
-        
-          bot.on('callback_query', (query) => {
-            const data = query.data;
-            if (data === 'yes') {
-              // Удаляем chatId пользователя из всех списков рассылки
-              for (const interest in subscribers) {
-                const chatIds = subscribers[interest].chatIds;
-                const index = chatIds.indexOf(chatId);
-                if (index !== -1) {
-                  chatIds.splice(index, 1);
+        if (isSubscribed(chatId)) {
+            bot.sendMessage(chatId, 'Are you sure you want to unsubscribe from the newsletter?', {
+                reply_markup: {
+                inline_keyboard: [
+                    [{ text: 'Yes', callback_data: 'yes' }, { text: 'No', callback_data: 'no' }]
+                ]
                 }
-              }
-              bot.sendMessage(chatId, 'You have successfully unsubscribed!');
-            } else {
-              bot.sendMessage(chatId, 'Canceled');
-            }
-        });
+            });
+            
+            bot.on('callback_query', (query) => {
+                const data = query.data;
+                if (data === 'yes') {
+                // Удаляем chatId пользователя из всех списков рассылки
+                for (const interest in subscribers) {
+                    const chatIds = subscribers[interest].chatIds;
+                    const index = chatIds.indexOf(chatId);
+                    if (index !== -1) {
+                    chatIds.splice(index, 1);
+                    }
+                }
+                bot.sendMessage(chatId, 'You have successfully unsubscribed!');
+                } else {
+                bot.sendMessage(chatId, 'Canceled');
+                }
+            });
+        }
+        else{
+            bot.sendMessage(chatId, 'You don\'t have any subscriptions');
+        }
     }
 
     // ***REGULAR DIALOGUE***
@@ -239,8 +248,16 @@ async function sendNewsToSubscribers() {
         console.error(error);
     }
 }
+setInterval(sendNewsToSubscribers, 1000);
 
-setInterval(sendNewsToSubscribers, 10000);
+function isSubscribed(chatId) {
+    for (const interest in subscribers) {
+      if (subscribers[interest].chatIds.includes(chatId)) {
+        return true;
+      }
+    }
+    return false;
+}
 
 function formatDate(date) {
     let init = date.substring(0, 10);
