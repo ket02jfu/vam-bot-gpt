@@ -17,6 +17,8 @@ const commands = [
     { command: '/start', description: 'Start the bot' },
     { command: '/help', description: 'Get help with the bot' },
     { command: '/news', description: 'Get news for a selected topic' },
+    { command: '/subscribe', description: 'Subscribe to newsletter by interest' },
+    { command: '/unsubscribe', description: 'Unsubscribe from the newsletter' },
     { command: '/generate', description: 'Photo generation by description (beta)' },
     { command: '/photo', description: 'Generates similar photos based on the sent (beta)' },
 ];
@@ -36,9 +38,8 @@ bot.on('message', async (msg) => {
     // ***HELP***
     else if(messageText.startsWith('/help') || messageText.startsWith('/рудз')){
         bot.sendMessage(chatId, `To understand what a bot can do, look at the following commands: 
-        \n/news - get news for a selected topic 
-        \n/generate - photo generation by description (beta)
-        \n/photo - generates similar photos based on the sent (beta)
+        \n/news - get news for a selected topic\n/subscribe - subscribe to newsletter by interest\n/unsubscribe - unsubscribe from the newsletter
+        \n/generate - photo generation by description (beta)\n/photo - generates similar photos based on the sent (beta)
         \nEverything else I can just chat with you as a friend, just ask me about something`)
     }
     
@@ -107,33 +108,68 @@ bot.on('message', async (msg) => {
         });
     } 
 
-    else if(messageText.startsWith('/subscribe')){
-        bot.sendMessage(chatId, 'Введите интересы через запятую (например, technology, sports)');
-        bot.once('message', async (msg) => {
-            const interests = msg.text.split(',').map((interest) => interest.trim());
+    // ***SUBSCRIBE***
+    else if(messageText.startsWith('/subscribe') || messageText.startsWith('/ыгиыскшиу')){
+        isCommand = true;
 
-            bot.sendMessage(chatId, 'На каком языке вы хотите прочитать новости?', {
-                reply_markup: {
-                    inline_keyboard: [[{ text: 'English', callback_data: 'en' }, { text: 'Русский', callback_data: 'ru' }]]
-                }
-            });
+        if (isCommand) {
+            bot.sendMessage(chatId, 'Enter interests separated by commas (for example, technology, sports)');
+            bot.once('message', async (msg) => {
+                const interests = msg.text.split(',').map((interest) => interest.trim());
 
-            bot.on('callback_query', (query) => {
-                const language = query.data;
-                for (const interest of interests) {
-                    if (subscribers[interest]) {
-                        subscribers[interest].chatIds.push(chatId);
-                    } else {
-                        subscribers[interest] = {
-                            language: language,
-                            chatIds: [chatId]
-                        };
+                bot.sendMessage(chatId, 'In what language do you want to read the news?', {
+                    reply_markup: {
+                        inline_keyboard: [[{ text: 'English', callback_data: 'en' }, { text: 'Russian', callback_data: 'ru' }, { text: 'Spanish', callback_data: 'es' }]]
                     }
-                }
-                bot.sendMessage(chatId, 'Вы подписались на новости!');
+                });
+
+                bot.on('callback_query', (query) => {
+                    const language = query.data;
+                    for (const interest of interests) {
+                        if (subscribers[interest]) {
+                            subscribers[interest].chatIds.push(chatId);
+                        } else {
+                            subscribers[interest] = {
+                                language: language,
+                                chatIds: [chatId]
+                            };
+                        }
+                    }
+                    isCommand = false;
+                    bot.sendMessage(chatId, 'You have subscribed to the news!');
+                })
             })
         }
-    )}
+    }
+
+    // ***SUBSCRIBE***
+    else if(messageText.startsWith('/unsubscribe') || messageText.startsWith('/гтыгиыскшиу')){
+        isCommand = true;
+        bot.sendMessage(chatId, 'Are you sure you want to unsubscribe from the newsletter?', {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: 'Yes', callback_data: 'yes' }, { text: 'No', callback_data: 'no' }]
+              ]
+            }
+          });
+        
+          bot.on('callback_query', (query) => {
+            const data = query.data;
+            if (data === 'yes') {
+              // Удаляем chatId пользователя из всех списков рассылки
+              for (const interest in subscribers) {
+                const chatIds = subscribers[interest].chatIds;
+                const index = chatIds.indexOf(chatId);
+                if (index !== -1) {
+                  chatIds.splice(index, 1);
+                }
+              }
+              bot.sendMessage(chatId, 'You have successfully unsubscribed!');
+            } else {
+              bot.sendMessage(chatId, 'Canceled');
+            }
+        });
+    }
 
     // ***REGULAR DIALOGUE***
     else {
@@ -141,14 +177,16 @@ bot.on('message', async (msg) => {
             bot.sendMessage(chatId, 'To work with a photo, use the /generate command');
         } 
         else {
-            const processingMsg = await bot.sendMessage(chatId, '...');
-            const response = await openai.complete({
-                engine: 'text-davinci-003',
-                prompt: `${messageText}`,
-                maxTokens: 3000,
-            });
-            const answer = response.data.choices[0].text.trim();
-            bot.editMessageText(`${answer}`, { chat_id: chatId, message_id: processingMsg.message_id });
+            if(!isCommand){
+                const processingMsg = await bot.sendMessage(chatId, '...');
+                const response = await openai.complete({
+                    engine: 'text-davinci-003',
+                    prompt: `${messageText}`,
+                    maxTokens: 3000,
+                });
+                const answer = response.data.choices[0].text.trim();
+                bot.editMessageText(`${answer}`, { chat_id: chatId, message_id: processingMsg.message_id });
+            }
         }
 
     }
@@ -202,7 +240,7 @@ async function sendNewsToSubscribers() {
     }
 }
 
-setInterval(sendNewsToSubscribers, 3600000);
+setInterval(sendNewsToSubscribers, 10000);
 
 function formatDate(date) {
     let init = date.substring(0, 10);
