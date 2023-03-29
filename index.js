@@ -8,7 +8,7 @@ const token = process.env.TELEGRAM_BOT_TOKEN;
 const bot = new TelegramApi(token, { polling: true });
 const openai = new OpenAI(process.env.OPENAI_API_KEY);
 
-const infuraProjectId = 'dabc6051e8ba418e97bd071e3762350f';
+const infuraProjectId = process.env.INFURA_PROJECT_ID;
 const web3 = new Web3(`https://mainnet.infura.io/v3/${infuraProjectId}`);
 
 const newsApiKey = process.env.NEWS_API_KEY;
