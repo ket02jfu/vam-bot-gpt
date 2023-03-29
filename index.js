@@ -1,15 +1,18 @@
 const TelegramApi = require('node-telegram-bot-api');
 const OpenAI = require('openai-api');
 const axios = require('axios');
-
+const Web3 = require('web3')
 require('dotenv').config();
 
-
 const token = process.env.TELEGRAM_BOT_TOKEN;
-const newsApiKey = process.env.NEWS_API_KEY;
-const openai = new OpenAI(process.env.OPENAI_API_KEY);
-let isCommand = false;
 const bot = new TelegramApi(token, { polling: true });
+const openai = new OpenAI(process.env.OPENAI_API_KEY);
+
+const infuraProjectId = 'dabc6051e8ba418e97bd071e3762350f';
+const web3 = new Web3(`https://mainnet.infura.io/v3/${infuraProjectId}`);
+
+const newsApiKey = process.env.NEWS_API_KEY;
+let isCommand = false;
 
 const subscribers = {};
 
@@ -22,6 +25,23 @@ const commands = [
     { command: '/generate', description: 'Photo generation by description (beta)' },
     { command: '/photo', description: 'Generates similar photos based on the sent (beta)' },
 ];
+
+// if (web3.eth.currentProvider.connected) {
+//     console.log('Подключено к узлу Ethereum');
+//   } else {
+//     console.log('Нет подключения к узлу Ethereum');
+// }
+// web3.eth.getBlockNumber((error, result) => {
+//     if (error) {
+//       console.error(error);
+//     } else {
+//       console.log(`Текущий блок: ${result}`);
+//     }
+// });
+
+// web3.eth.net.isListening()
+//   .then(() => console.log('Web3 is connected'))
+//   .catch(e => console.log('Wow. Something went wrong'));
 
 // ***SET_COMMANDS**
 bot.setMyCommands(commands);
@@ -42,6 +62,11 @@ bot.on('message', async (msg) => {
         \n/generate - photo generation by description (beta)\n/photo - generates similar photos based on the sent (beta)
         \nEverything else I can just chat with you as a friend, just ask me about something`)
     }
+
+    // //***WALLET***
+    // else if(messageText.startsWith('/wallet')) {
+    //     handleWalletCommand()
+    // }
     
     // ***NEWS***
     else if (messageText.startsWith('/news') || messageText.startsWith('/туцы') || messageText.startsWith('/nws')) {
@@ -83,17 +108,8 @@ bot.on('message', async (msg) => {
                     { text: 'English', callback_data: 'en' },
                     { text: 'Russian', callback_data: 'ru' },
                     { text: 'Spanish', callback_data: 'es' },
+                    { text: 'Chines', callback_data: 'zh' },
                   ],
-                //   [
-                //     { text: 'Chinese', callback_data: 'zh' },
-                //     { text: 'Kazakh', callback_data: 'kk' },
-                //     { text: 'Italian', callback_data: 'it' },
-                //   ],
-                //   [
-                //     { text: 'German', callback_data: 'de' },
-                //     { text: 'Japanese', callback_data: 'ja' },
-                //     { text: 'French', callback_data: 'fr' },
-                //   ],
                 ],
                 one_time_keyboard: true
               },
@@ -109,76 +125,83 @@ bot.on('message', async (msg) => {
     } 
 
     // ***SUBSCRIBE***
-    else if(messageText.startsWith('/subscribe') || messageText.startsWith('/ыгиыскшиу')){
+    else if (messageText.startsWith('/subscribe') || messageText.startsWith('/подписаться')) {
         isCommand = true;
 
-        if (isSubscribed(chatId)) {
-            bot.sendMessage(chatId, 'You are already subscribed to the news, use the /unsubscribe command to unsubscribe!');
-            return;
-        }
-
-        if (isCommand) {
+        if(isCommand){
+            if (isSubscribed(chatId)) {
+                bot.sendMessage(chatId, 'You are already subscribed to the news, use the /unsubscribe command to unsubscribe!');
+                return;
+            }
+            
             bot.sendMessage(chatId, 'Enter interests separated by commas (for example, technology, sports)');
             bot.once('message', async (msg) => {
-                const interests = msg.text.split(',').map((interest) => interest.trim());
-
-                bot.sendMessage(chatId, 'In what language do you want to read the news?', {
-                    reply_markup: {
-                        inline_keyboard: [[{ text: 'English', callback_data: 'en' }, { text: 'Russian', callback_data: 'ru' }, { text: 'Spanish', callback_data: 'es' }]]
+                    const interests = msg.text.split(',').map((interest) => interest.trim());
+                
+                    if (interests.length === 0) {
+                        bot.sendMessage(chatId, 'You have to enter at least one interest to subscribe');
+                        return;
                     }
-                });
-
-                bot.on('callback_query', (query) => {
+                
+                    bot.sendMessage(chatId, 'In what language do you want to read the news?', {
+                        reply_markup: {
+                            inline_keyboard: [[{ text: 'English', callback_data: 'en' }, { text: 'Russian', callback_data: 'ru' }, { text: 'Spanish', callback_data: 'es' }]]
+                        }
+                    });
+                
+                    bot.on('callback_query', (query) => {
                     const language = query.data;
+                
                     for (const interest of interests) {
                         if (subscribers[interest]) {
+                        // Если пользователь уже подписан на данный интерес, то добавляем его chatId в массив chatIds
+                        if (!subscribers[interest].chatIds.includes(chatId)) {
                             subscribers[interest].chatIds.push(chatId);
+                        }
                         } else {
-                            subscribers[interest] = {
-                                language: language,
-                                chatIds: [chatId]
-                            };
+                        // Если пользователь подписывается на интерес впервые, то создаем новую запись
+                        subscribers[interest] = {
+                            language: language,
+                            chatIds: [chatId]
+                        };
                         }
                     }
-                    isCommand = false;
-                    bot.sendMessage(chatId, 'You have subscribed to the news!');
-                })
-            })
+                
+                    bot.sendMessage(chatId, 'You have successfully subscribed to the news!');
+                    console.log(subscribers);
+                
+                    // Очищаем обработчики событий, чтобы не накапливались при каждой новой подписке
+                    bot.removeReplyListener();
+                    bot.removeAllListeners('callback_query');
+                });
+            });
         }
     }
+  
+  // ***UNSUBSCRIBE***
+//   else if (messageText.startsWith('/unsubscribe')) {
+//     if (isSubscribed(chatId)) {
+//         bot.sendMessage(chatId, 'Enter interests separated by commas (for example, technology, sports)');
+//         bot.once('message', async (msg) => {
+//                 const interests = msg.text.split(',').map((interest) => interest.trim());
+//                 for (const interest of interests) {
+//                     const index = subscribers[interest].chatIds.indexOf(chatId);
+//                     if (index !== -1) {
+//                     subscribers[interest].chatIds.splice(index, 1);
 
-    // ***UnSUBSCRIBE***
-    else if(messageText.startsWith('/unsubscribe') || messageText.startsWith('/гтыгиыскшиу')){
-        if (isSubscribed(chatId)) {
-            bot.sendMessage(chatId, 'Are you sure you want to unsubscribe from the newsletter?', {
-                reply_markup: {
-                inline_keyboard: [
-                    [{ text: 'Yes', callback_data: 'yes' }, { text: 'No', callback_data: 'no' }]
-                ]
-                }
-            });
-            
-            bot.on('callback_query', (query) => {
-                const data = query.data;
-                if (data === 'yes') {
-                // Удаляем chatId пользователя из всех списков рассылки
-                for (const interest in subscribers) {
-                    const chatIds = subscribers[interest].chatIds;
-                    const index = chatIds.indexOf(chatId);
-                    if (index !== -1) {
-                    chatIds.splice(index, 1);
-                    }
-                }
-                bot.sendMessage(chatId, 'You have successfully unsubscribed!');
-                } else {
-                bot.sendMessage(chatId, 'Canceled');
-                }
-            });
-        }
-        else{
-            bot.sendMessage(chatId, 'You don\'t have any subscriptions');
-        }
-    }
+//                     // Если после отписки chatIds стал пустым, то удаляем интерес из объекта subscribers
+//                     if (subscribers[interest].chatIds.length === 0) {
+//                         delete subscribers[interest];
+//                     }
+//                     }
+//                 }
+//                 bot.sendMessage(chatId, 'You have successfully unsubscribed!');
+//                 console.log(subscribers);
+//         })
+//     } else {
+//         bot.sendMessage(chatId, 'You are not subscribed to any newsletters');
+//     }         
+//   }   
 
     // ***REGULAR DIALOGUE***
     else {
@@ -200,6 +223,39 @@ bot.on('message', async (msg) => {
 
     }
 });
+
+async function handleWalletCommand(msg) {
+    isCommand = true;
+    try {
+      // Check if Web3 is connected to the network
+      const isWeb3Connected = await web3.eth.net.isListening();
+      if (!isWeb3Connected) {
+        throw new Error('Web3 is not connected');
+      }
+  
+      // Ask user for wallet address
+      await bot.sendMessage(msg.chat.id, 'Please enter your wallet address');
+  
+      // Wait for user's response
+      const response = await bot.onReplyToMessage(msg.chat.id, msg.message_id, async (reply) => {
+        const walletAddress = reply.text;
+  
+        // Get user's ETH balance
+        const balance = await web3.eth.getBalance(walletAddress);
+        const balanceInEth = web3.utils.fromWei(balance, 'ether');
+  
+        // Send balance to user
+        const response = `Your ETH balance is ${balanceInEth}`;
+        await bot.sendMessage(msg.chat.id, response);
+      });
+    } catch (e) {
+      console.error(e);
+      await bot.sendMessage(msg.chat.id, 'Sorry, something went wrong');
+    }
+}
+
+bot.onText(/\/wallet/, handleWalletCommand);
+
 
 async function getNews(chatId, interests, language, pageSize = 10) {
     try {
@@ -248,7 +304,7 @@ async function sendNewsToSubscribers() {
         console.error(error);
     }
 }
-setInterval(sendNewsToSubscribers, 1000);
+setInterval(sendNewsToSubscribers, 1200000);
 
 function isSubscribed(chatId) {
     for (const interest in subscribers) {
